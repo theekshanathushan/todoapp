@@ -11,20 +11,50 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:todoapp/main.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
+  testWidgets('ToDo App renders items and handles add, search, and delete', (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() => tester.view.resetPhysicalSize());
+
     await tester.pumpWidget(const MyApp());
+    await tester.pumpAndSettle();
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    // 1. Initial items are present
+    expect(find.text('ALL TODOS'), findsOneWidget);
+    expect(find.text('Evening Gym'), findsOneWidget);
+    expect(find.text('Breakfast'), findsOneWidget);
 
-    // Tap the '+' icon and trigger a frame.
+    // 2. Add a new item "hi"
+    await tester.enterText(find.widgetWithText(TextField, 'Add New To Do'), 'hi');
     await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    await tester.pumpAndSettle();
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    // "hi" should now be in the list
+    expect(find.text('hi'), findsOneWidget);
+
+    // 3. Search for "Lunch"
+    await tester.enterText(find.widgetWithText(TextField, 'Search'), 'Lunch');
+    await tester.pumpAndSettle();
+
+    // Only "Lunch" should be displayed in the list
+    expect(find.widgetWithText(ListTile, 'Lunch'), findsOneWidget);
+    expect(find.widgetWithText(ListTile, 'Evening Gym'), findsNothing);
+
+    // Clear search
+    await tester.enterText(find.widgetWithText(TextField, 'Search'), '');
+    await tester.pumpAndSettle();
+    expect(find.text('Evening Gym'), findsOneWidget);
+
+    // 4. Toggle check status
+    final gymFinder = find.widgetWithText(ListTile, 'Evening Gym');
+    await tester.tap(gymFinder);
+    await tester.pumpAndSettle();
+
+    // 5. Delete "Lunch"
+    final lunchFinder = find.widgetWithText(ListTile, 'Lunch');
+    final deleteBtn = find.descendant(of: lunchFinder, matching: find.byIcon(Icons.delete));
+    await tester.tap(deleteBtn);
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(ListTile, 'Lunch'), findsNothing);
   });
 }

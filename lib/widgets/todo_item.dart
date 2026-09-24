@@ -7,11 +7,11 @@ class TodoItem extends StatelessWidget {
   final Function onDelete;
   
   const TodoItem({
-    Key? key,
+    super.key,
     required this.todo,
     required this.onclick,
     required this.onDelete,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -21,16 +21,37 @@ class TodoItem extends StatelessWidget {
         color: const Color.fromARGB(255, 2, 40, 71),
         borderRadius: BorderRadius.circular(20),
       ),
-      child: const Placeholder(fallbackHeight: 60), // Remove this Placeholder
-      /*
-      TODO 1: Replace the Placeholder above with a ListTile.
-      
-      - onTap: Call the onclick() function passed into this widget.
-      - leading: Use a ternary operator to show Icons.check_box if todo.isDone is true, 
-                 otherwise show Icons.check_box_outline_blank.
-      - title: Display the todo.title text. Add a line-through decoration if it is done.
-      - trailing: Add an IconButton with a delete icon. Its onPressed should call onDelete().
-      */
+      child: Material(
+        color: Colors.transparent,
+        child: ListTile(
+          onTap: () {
+            onclick();
+          },
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
+          leading: Icon(
+            todo.isDone ? Icons.check_box : Icons.check_box_outline_blank,
+            color: Colors.white,
+          ),
+          title: Text(
+            todo.title,
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              decoration: todo.isDone ? TextDecoration.lineThrough : null,
+              decorationColor: Colors.white,
+            ),
+          ),
+          trailing: IconButton(
+            icon: const Icon(Icons.delete, color: Colors.red),
+            onPressed: () {
+              onDelete();
+            },
+          ),
+        ),
+      ),
     );
   }
 }
