@@ -13,6 +13,21 @@ class Todo {
     isDone = !isDone;
   }
 
+  Map<String, dynamic> toMap() {
+    return {
+      'title': title,
+      'isDone': isDone,
+    };
+  }
+
+  factory Todo.fromFirestore(Map<String, dynamic> data, String id) {
+    return Todo(
+      id: id,
+      title: data['title'] ?? '',
+      isDone: data['isDone'] ?? false,
+    );
+  }
+
   static List<Todo> toDoList() {
     return [
       Todo(id: '1', title: "Morning Gym", isDone: true),
@@ -22,4 +37,4 @@ class Todo {
       Todo(id: '5', title: "Evening Gym"),
     ];
   }
-}
+}

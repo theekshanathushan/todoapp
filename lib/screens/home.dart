@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_core/firebase_core.dart';
 import '../models/todo.dart';
 import '../widgets/todo_item.dart';
 
@@ -10,14 +12,66 @@ class Home extends StatefulWidget {
 }
 
 class _HomeState extends State<Home> {
-  final todos = Todo.toDoList();
-  List<Todo> _searchToDo = [];
+  // Local fallback for testing when Firebase is not initialized
+  final List<Todo> _localTodos = Todo.toDoList();
+  String _searchQuery = '';
   final todoTextInput = TextEditingController();
 
+  CollectionReference<Map<String, dynamic>> get _todosCollection =>
+      FirebaseFirestore.instance.collection('todos');
+
+  bool get _isFirebaseReady => Firebase.apps.isNotEmpty;
+
   @override
-  void initState() {
-    super.initState();
-    _searchToDo = todos;
+  void dispose() {
+    todoTextInput.dispose();
+    super.dispose();
+  }
+
+  // Add new ToDo to Firestore
+  Future<void> _addTodo() async {
+    final title = todoTextInput.text.trim();
+    if (title.isEmpty) return;
+
+    if (_isFirebaseReady) {
+      await _todosCollection.add({
+        'title': title,
+        'isDone': false,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    } else {
+      setState(() {
+        _localTodos.add(Todo(
+          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          title: title,
+        ));
+      });
+    }
+    todoTextInput.clear();
+  }
+
+  // Toggle ToDo status in Firestore
+  Future<void> _toggleDone(Todo todo) async {
+    if (_isFirebaseReady) {
+      await _todosCollection.doc(todo.id).update({
+        'isDone': !todo.isDone,
+      });
+    } else {
+      setState(() {
+        todo.toggleDone();
+      });
+    }
+  }
+
+  // Delete ToDo from Firestore
+  Future<void> _deleteTodo(String id) async {
+    if (_isFirebaseReady) {
+      await _todosCollection.doc(id).delete();
+    } else {
+      setState(() {
+        _localTodos.removeWhere((item) => item.id == id);
+      });
+    }
   }
 
   @override
@@ -35,8 +89,8 @@ class _HomeState extends State<Home> {
               onPressed: () {},
             ),
             const CircleAvatar(
-              backgroundImage: AssetImage("assets/profile.png"), 
-            )
+              backgroundImage: AssetImage("assets/profile.png"),
+            ),
           ],
         ),
       ),
@@ -46,7 +100,7 @@ class _HomeState extends State<Home> {
           children: [
             const SizedBox(height: 10),
             _searchBox(),
-            _list(),
+            Expanded(child: _buildTodoList()),
             _input(),
           ],
         ),
@@ -66,7 +120,11 @@ class _HomeState extends State<Home> {
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8),
           child: TextField(
-            onChanged: (value) => searchData(value),
+            onChanged: (value) {
+              setState(() {
+                _searchQuery = value.trim();
+              });
+            },
             decoration: const InputDecoration(
               border: InputBorder.none,
               prefixIcon: Icon(Icons.search, color: Colors.black),
@@ -78,52 +136,106 @@ class _HomeState extends State<Home> {
     );
   }
 
-  // TODO 2: Build the Todo List UI
-  Widget _list() {
-    return Expanded(
-      child: Padding(
-        padding: const EdgeInsets.all(14.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 20),
-            const Text(
-              "ALL TODOS",
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.black,
-              ),
+  // Todo List UI with Firestore Stream
+  Widget _buildTodoList() {
+    return Padding(
+      padding: const EdgeInsets.all(14.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 20),
+          const Text(
+            "ALL TODOS",
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: Colors.black,
             ),
-            const SizedBox(height: 10),
-            Expanded(
-              child: ListView(
-                children: [
-                  for (Todo todo in _searchToDo.reversed)
-                    TodoItem(
-                      todo: todo,
-                      onclick: () {
-                        setState(() {
-                          todo.toggleDone();
-                        });
-                      },
-                      onDelete: () {
-                        setState(() {
-                          todos.removeWhere((item) => item.id == todo.id);
-                          _searchToDo.removeWhere((item) => item.id == todo.id);
-                        });
-                      },
-                    ),
-                ],
-              ),
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 10),
+          Expanded(
+            child: _isFirebaseReady ? _buildFirestoreStream() : _buildLocalList(),
+          ),
+        ],
       ),
     );
   }
 
-  // TODO 3: Build the Input UI
+  // Real-time Firestore stream
+  Widget _buildFirestoreStream() {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: _todosCollection.orderBy('createdAt', descending: true).snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Center(
+            child: Text(
+              "Error: ${snapshot.error}",
+              style: const TextStyle(color: Colors.red),
+            ),
+          );
+        }
+
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final docs = snapshot.data?.docs ?? [];
+        final todos = docs.map((doc) {
+          return Todo.fromFirestore(doc.data(), doc.id);
+        }).toList();
+
+        final filteredTodos = _searchQuery.isEmpty
+            ? todos
+            : todos
+                .where((item) =>
+                    item.title.toLowerCase().contains(_searchQuery.toLowerCase()))
+                .toList();
+
+        if (filteredTodos.isEmpty) {
+          return const Center(
+            child: Text(
+              "No ToDos found",
+              style: TextStyle(color: Colors.grey, fontSize: 16),
+            ),
+          );
+        }
+
+        return ListView(
+          children: [
+            for (Todo todo in filteredTodos)
+              TodoItem(
+                todo: todo,
+                onclick: () => _toggleDone(todo),
+                onDelete: () => _deleteTodo(todo.id),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Fallback for tests
+  Widget _buildLocalList() {
+    final filtered = _searchQuery.isEmpty
+        ? _localTodos
+        : _localTodos
+            .where((item) =>
+                item.title.toLowerCase().contains(_searchQuery.toLowerCase()))
+            .toList();
+
+    return ListView(
+      children: [
+        for (Todo todo in filtered.reversed)
+          TodoItem(
+            todo: todo,
+            onclick: () => _toggleDone(todo),
+            onDelete: () => _deleteTodo(todo.id),
+          ),
+      ],
+    );
+  }
+
+  // Input Box UI
   Widget _input() {
     return Align(
       alignment: Alignment.bottomCenter,
@@ -145,23 +257,13 @@ class _HomeState extends State<Home> {
                       border: InputBorder.none,
                       hintText: "Add New To Do",
                     ),
+                    onSubmitted: (_) => _addTodo(),
                   ),
                 ),
               ),
               IconButton(
                 icon: const Icon(Icons.add),
-                onPressed: () {
-                  if (todoTextInput.text.trim().isNotEmpty) {
-                    setState(() {
-                      todos.add(Todo(
-                        id: DateTime.now().millisecondsSinceEpoch.toString(),
-                        title: todoTextInput.text.trim(),
-                      ));
-                      _searchToDo = todos;
-                      todoTextInput.clear();
-                    });
-                  }
-                },
+                onPressed: _addTodo,
               ),
             ],
           ),
@@ -169,21 +271,4 @@ class _HomeState extends State<Home> {
       ),
     );
   }
-
-  // TODO 4: Implement Search logic
-  void searchData(String text) {
-    List<Todo> results = [];
-    if (text.isEmpty) {
-      results = todos;
-    } else {
-      results = todos
-          .where((item) =>
-              item.title.toLowerCase().contains(text.toLowerCase()))
-          .toList();
-    }
-
-    setState(() {
-      _searchToDo = results;
-    });
-  }
-}
+}
