@@ -54,6 +54,7 @@ class _HomeState extends State<Home> {
     );
   }
 
+  // Search Box UI
   Widget _searchBox() {
     return Padding(
       padding: const EdgeInsets.all(12.0),
@@ -77,6 +78,7 @@ class _HomeState extends State<Home> {
     );
   }
 
+  // TODO 2: Build the Todo List UI
   Widget _list() {
     return Expanded(
       child: Padding(
@@ -121,6 +123,7 @@ class _HomeState extends State<Home> {
     );
   }
 
+  // TODO 3: Build the Input UI
   Widget _input() {
     return Align(
       alignment: Alignment.bottomCenter,
@@ -167,6 +170,7 @@ class _HomeState extends State<Home> {
     );
   }
 
+  // TODO 4: Implement Search logic
   void searchData(String text) {
     List<Todo> results = [];
     if (text.isEmpty) {

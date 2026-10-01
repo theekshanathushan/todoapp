@@ -21,6 +21,7 @@ class TodoItem extends StatelessWidget {
         color: const Color.fromARGB(255, 2, 40, 71),
         borderRadius: BorderRadius.circular(20),
       ),
+      // TODO 1: Build the UI for a single ToDo item using a ListTile
       child: Material(
         color: Colors.transparent,
         child: ListTile(
